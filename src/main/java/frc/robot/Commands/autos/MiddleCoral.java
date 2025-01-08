@@ -40,10 +40,10 @@ public class MiddleCoral extends SubsystemBase {
 
         // TO CONFIGURE Define the module offsets (positions relative to the robot's center)     
         Translation2d[] moduleOffsets = {
-            new Translation2d(0.3, 0.3),  // Front Left (replace with your module's position)
-            new Translation2d(0.3, -0.3), // Front Right (replace with your module's position)
-            new Translation2d(-0.3, 0.3), // Back Left (replace with your module's position)
-            new Translation2d(-0.3, -0.3) // Back Right (replace with your module's position)
+            new Translation2d(0.314325, 0.314325),  // Front Left (replace with your module's position)
+            new Translation2d(0.314325, -0.314325), // Front Right (replace with your module's position)
+            new Translation2d(-0.314325, 0.314325), // Back Left (replace with your module's position)
+            new Translation2d(-0.314325, -0.314325) // Back Right (replace with your module's position)
         };
 
         // Create the RobotConfig object
