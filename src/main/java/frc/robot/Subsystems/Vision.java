@@ -1,8 +1,9 @@
 package frc.robot.Subsystems;
 
  import static frc.robot.Constants.Vision.*;
- 
- import edu.wpi.first.math.Matrix;
+
+import edu.wpi.first.apriltag.AprilTagFieldLayout;
+import edu.wpi.first.math.Matrix;
  import edu.wpi.first.math.VecBuilder;
  import edu.wpi.first.math.geometry.Pose2d;
  import edu.wpi.first.math.geometry.Rotation2d;
@@ -11,7 +12,12 @@ package frc.robot.Subsystems;
  import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import frc.robot.Robot;
 
- import java.util.List;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
  import java.util.Optional;
  import org.photonvision.EstimatedRobotPose;
  import org.photonvision.PhotonCamera;
@@ -21,6 +27,8 @@ import frc.robot.Robot;
  import org.photonvision.simulation.SimCameraProperties;
  import org.photonvision.simulation.VisionSystemSim;
  import org.photonvision.targeting.PhotonTrackedTarget;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
  
  public class Vision {
      private final PhotonCamera camera;
@@ -30,36 +38,49 @@ import frc.robot.Robot;
      // Simulation
      private PhotonCameraSim cameraSim;
      private VisionSystemSim visionSim;
+
+     public AprilTagFieldLayout aprilTagFieldLayout = loadAprilTagFieldLayout("/fields/Reefscape2025.json");
  
      public Vision() {
          camera = new PhotonCamera(kCameraName);
  
          photonEstimator =
-                 new PhotonPoseEstimator(kTagLayout, PoseStrategy.MULTI_TAG_PNP_ON_COPROCESSOR, kRobotToCam);
+                 new PhotonPoseEstimator(aprilTagFieldLayout, PoseStrategy.MULTI_TAG_PNP_ON_COPROCESSOR, kRobotToCam);
          photonEstimator.setMultiTagFallbackStrategy(PoseStrategy.LOWEST_AMBIGUITY);
+
+        }
+
+        public static AprilTagFieldLayout loadAprilTagFieldLayout(String resourceFile) { 
+            try (InputStream is = Vision.class.getResourceAsStream(resourceFile); 
+            InputStreamReader isr = new InputStreamReader(is, StandardCharsets.UTF_8)) { 
+                ObjectMapper mapper = new ObjectMapper(); 
+                return mapper.readValue(isr, AprilTagFieldLayout.class); 
+            } catch (IOException e) { 
+                throw new UncheckedIOException(e); 
+            } 
+        }
+    //      // ----- Simulation
+    //      if (Robot.isSimulation()) {
+    //          // Create the vision system simulation which handles cameras and targets on the field.
+    //          visionSim = new VisionSystemSim("main");
+    //          // Add all the AprilTags inside the tag layout as visible targets to this simulated field.
+    //          visionSim.addAprilTags(kTagLayout);
+    //          // Create simulated camera properties. These can be set to mimic your actual camera.
+    //          var cameraProp = new SimCameraProperties();
+    //          cameraProp.setCalibration(960, 720, Rotation2d.fromDegrees(90));
+    //          cameraProp.setCalibError(0.35, 0.10);
+    //          cameraProp.setFPS(15);
+    //          cameraProp.setAvgLatencyMs(50);
+    //          cameraProp.setLatencyStdDevMs(15);
+    //          // Create a PhotonCameraSim which will update the linked PhotonCamera's values with visible
+    //          // targets.
+    //          cameraSim = new PhotonCameraSim(camera, cameraProp);
+    //          // Add the simulated camera to view the targets on this simulated field.
+    //          visionSim.addCamera(cameraSim, kRobotToCam);
  
-         // ----- Simulation
-         if (Robot.isSimulation()) {
-             // Create the vision system simulation which handles cameras and targets on the field.
-             visionSim = new VisionSystemSim("main");
-             // Add all the AprilTags inside the tag layout as visible targets to this simulated field.
-             visionSim.addAprilTags(kTagLayout);
-             // Create simulated camera properties. These can be set to mimic your actual camera.
-             var cameraProp = new SimCameraProperties();
-             cameraProp.setCalibration(960, 720, Rotation2d.fromDegrees(90));
-             cameraProp.setCalibError(0.35, 0.10);
-             cameraProp.setFPS(15);
-             cameraProp.setAvgLatencyMs(50);
-             cameraProp.setLatencyStdDevMs(15);
-             // Create a PhotonCameraSim which will update the linked PhotonCamera's values with visible
-             // targets.
-             cameraSim = new PhotonCameraSim(camera, cameraProp);
-             // Add the simulated camera to view the targets on this simulated field.
-             visionSim.addCamera(cameraSim, kRobotToCam);
- 
-             cameraSim.enableDrawWireframe(true);
-         }
-     }
+    //          cameraSim.enableDrawWireframe(true);
+    //      }
+    //  }
  
      /**
       * The latest estimated robot pose on the field from vision data. This may be empty. This should

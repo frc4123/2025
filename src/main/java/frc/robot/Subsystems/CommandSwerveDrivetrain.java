@@ -14,6 +14,9 @@ import com.pathplanner.lib.config.PIDConstants;
 import com.pathplanner.lib.config.RobotConfig;
 import com.pathplanner.lib.controllers.PPHolonomicDriveController;
 import edu.wpi.first.math.Matrix;
+import edu.wpi.first.math.VecBuilder;
+import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
+import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
@@ -24,6 +27,7 @@ import edu.wpi.first.wpilibj.RobotController;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
+import frc.robot.Constants.SwerveConstants;
 import frc.robot.commands.generated.TunerConstants.TunerSwerveDrivetrain;
 
 
@@ -37,7 +41,9 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
     private static final double kSimLoopPeriod = 0.005; // 5 ms
     private Notifier m_simNotifier = null;
     private double m_lastSimTime;
-    
+
+    // The robot pose estimator for tracking swerve odometry and applying vision corrections.
+    private final SwerveDrivePoseEstimator poseEstimator;
 
     /* Blue alliance sees forward as 0 degrees (toward red alliance wall) */
     private static final Rotation2d kBlueAlliancePerspectiveRotation = Rotation2d.kZero;
@@ -135,6 +141,20 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
             startSimThread();
         }
         configureAutoBuilder();
+        // Define the standard deviations for the pose estimator, which determine how fast the pose
+        // estimate converges to the vision measurement. This should depend on the vision measurement
+        // noise
+        // and how many or how frequently vision measurements are applied to the pose estimator.
+        var stateStdDevs = VecBuilder.fill(0.1, 0.1, 0.1);
+        var visionStdDevs = VecBuilder.fill(1, 1, 1);
+        poseEstimator =
+                new SwerveDrivePoseEstimator(
+                        SwerveConstants.kDriveKinematics,
+                        getState().Pose.getRotation(),
+                        getState().ModulePositions,
+                        new Pose2d(),
+                        stateStdDevs,
+                        visionStdDevs);
     }
 
     /**
@@ -160,6 +180,16 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
             startSimThread();
         }
         configureAutoBuilder();
+        var stateStdDevs = VecBuilder.fill(0.1, 0.1, 0.1);
+        var visionStdDevs = VecBuilder.fill(1, 1, 1);
+        poseEstimator =
+                new SwerveDrivePoseEstimator(
+                        SwerveConstants.kDriveKinematics,
+                        getState().Pose.getRotation(),
+                        getState().ModulePositions,
+                        new Pose2d(),
+                        stateStdDevs,
+                        visionStdDevs);
     }
 
     /**
@@ -195,6 +225,16 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
             startSimThread();
         }
         configureAutoBuilder();
+        var stateStdDevs = VecBuilder.fill(0.1, 0.1, 0.1);
+        var visionStdDevs = VecBuilder.fill(1, 1, 1);
+        poseEstimator =
+                new SwerveDrivePoseEstimator(
+                        SwerveConstants.kDriveKinematics,
+                        getState().Pose.getRotation(),
+                        getState().ModulePositions,
+                        new Pose2d(),
+                        stateStdDevs,
+                        visionStdDevs);
     }
 
     private void configureAutoBuilder() {
@@ -277,6 +317,7 @@ public class CommandSwerveDrivetrain extends TunerSwerveDrivetrain implements Su
                 m_hasAppliedOperatorPerspective = true;
             });
         }
+        poseEstimator.update(getState().Pose.getRotation(), getState().ModulePositions);
     }
 
     private void startSimThread() {
