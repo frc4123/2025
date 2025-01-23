@@ -1,377 +1,169 @@
-package frc.robot.subsystems;
+package frc.robot.Subsystems;
 
-import edu.wpi.first.apriltag.AprilTagFieldLayout;
-import edu.wpi.first.math.Matrix;
-import edu.wpi.first.math.VecBuilder;
-import edu.wpi.first.math.geometry.Pose2d;
-import edu.wpi.first.math.geometry.Pose3d;
-import edu.wpi.first.math.geometry.Rotation2d;
-import edu.wpi.first.math.geometry.Rotation3d;
-import edu.wpi.first.math.geometry.Transform3d;
-import edu.wpi.first.math.geometry.Translation3d;
-import edu.wpi.first.math.numbers.N1;
-import edu.wpi.first.math.numbers.N3;
-import edu.wpi.first.wpilibj.DriverStation;
-import edu.wpi.first.wpilibj.DriverStation.Alliance;
-import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
-import edu.wpi.first.wpilibj2.command.Command;
-import edu.wpi.first.wpilibj2.command.Commands;
-import edu.wpi.first.wpilibj2.command.SubsystemBase;
-import frc.robot.commands.generated.TunerConstants;
+ import static frc.robot.Constants.Vision.*;
+ 
+ import edu.wpi.first.math.Matrix;
+ import edu.wpi.first.math.VecBuilder;
+ import edu.wpi.first.math.geometry.Pose2d;
+ import edu.wpi.first.math.geometry.Rotation2d;
+ import edu.wpi.first.math.numbers.N1;
+ import edu.wpi.first.math.numbers.N3;
+ import edu.wpi.first.wpilibj.smartdashboard.Field2d;
+import frc.robot.Robot;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-
-import org.photonvision.PhotonCamera;
-import org.photonvision.PhotonPoseEstimator;
-import org.photonvision.PhotonPoseEstimator.PoseStrategy;
-import org.photonvision.PhotonUtils;
-import org.photonvision.targeting.PhotonPipelineResult;
-import org.photonvision.targeting.PhotonTrackedTarget;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.pathplanner.lib.auto.AutoBuilder;
-import com.pathplanner.lib.path.PathConstraints;
-
-public class Vision extends SubsystemBase{
-
-    PhotonCamera camera = new PhotonCamera("Arducam_OV9281_USB_Camera");
-
-    public Transform3d robotToCam = new Transform3d(new Translation3d(0.3556, 0.0, 0.13335), new Rotation3d(0,0,0)); //Cam mounted facing forward, half a meter forward of center, half a meter up from center.
-    public AprilTagFieldLayout aprilTagFieldLayout = loadAprilTagFieldLayout("/fields/Reefscape2025.json");
-    //public AprilTagFieldLayout aprilTagFieldLayout = AprilTagFieldLayout.loadField(AprilTagFields.k2024Crescendo);    
-    public PhotonPoseEstimator photonPoseEstimator = new PhotonPoseEstimator(aprilTagFieldLayout, PoseStrategy.CLOSEST_TO_REFERENCE_POSE, robotToCam);
-
-    private Rotation2d lastGamePieceAngle = getDegreesToGamePiece();
-    
-    static final Set<Integer> redTargets = new HashSet<>(Arrays.asList(1,2,3,4,5,6,7,8,9,10,11));
-    static final Set<Integer> blueTargets = new HashSet<>(Arrays.asList(12,13,14,15,16,17,18,19,20,21,22));
-
-    static final Set<Integer> blueReef = new HashSet<>(Arrays.asList(17,18,19,20,21,22));
-    static final Set<Integer> redReef = new HashSet<>(Arrays.asList(6,7,8,9,10,11));
-
-    static final Set<Integer> blueBarge = new HashSet<>(Arrays.asList(4,14));
-    static final Set<Integer> redBarge = new HashSet<>(Arrays.asList(5,15));
-
-    static final Set<Integer> blueCoralStation = new HashSet<>(Arrays.asList(12,13));
-    static final Set<Integer> redCoralStation = new HashSet<>(Arrays.asList(1,2));
-
-    static final Set<Integer> blueProcessor = new HashSet<>(Arrays.asList(16));
-    static final Set<Integer> redProcessor = new HashSet<>(Arrays.asList(3));
-
-    Matrix<N3, N1> visionMeasurementStdDevs = VecBuilder.fill(0.01, 0.1, 0.1); 
-
-    public enum DetectedAlliance {RED, BLUE, NONE};
-
-    private List<PhotonPipelineResult> currentResultList;
-    private PhotonPipelineResult currentResult;
-
-    private final CommandSwerveDrivetrain drivetrain; 
-
-    public Vision(CommandSwerveDrivetrain drivetrain){
-        this.drivetrain = drivetrain;
-
-    }
-
-    public static AprilTagFieldLayout loadAprilTagFieldLayout(String resourceFile) { 
-        try (InputStream is = Vision.class.getResourceAsStream(resourceFile); 
-        InputStreamReader isr = new InputStreamReader(is, StandardCharsets.UTF_8)) { 
-            ObjectMapper mapper = new ObjectMapper(); 
-            return mapper.readValue(isr, AprilTagFieldLayout.class); 
-        } catch (IOException e) { 
-            throw new UncheckedIOException(e); 
-        } 
-    }
-    
-
-    public DetectedAlliance getAllianceStatus() {
-        var result = currentResult;
-        List<PhotonTrackedTarget> targets = result.getTargets();
-        var redTargetCount = 0;
-        var blueTargetCount = 0;
-
-        for (PhotonTrackedTarget target : targets) {
-            if (redTargets.contains(target.getFiducialId())) {
-                redTargetCount += 1;
-            }
-            if (blueTargets.contains(target.getFiducialId())) {
-                blueTargetCount += 1;
-            }
-        }
-
-        if (redTargetCount > blueTargetCount && redTargetCount >= 1) {
-            return DetectedAlliance.RED;
-        } else if (blueTargetCount > redTargetCount && blueTargetCount >= 1) {
-            return DetectedAlliance.BLUE;
-        } else return DetectedAlliance.NONE;
-    }
-
-    public Pose3d get3dPose() {
-        var result = currentResult; 
-        if (result != null) { 
-            PhotonTrackedTarget target = result.getBestTarget(); 
-            Optional<Pose3d> optionalPose = aprilTagFieldLayout.getTagPose(target.getFiducialId()); 
-
-            Pose3d cameraRobotPose = PhotonUtils.estimateFieldToRobotAprilTag(target.getBestCameraToTarget(), optionalPose.get(), robotToCam);
-            return cameraRobotPose; 
-        } else return null; 
-    }
-    
-    public Pose2d get2dPose() {
-        if (get3dPose() != null) {
-            Pose2d convertedPose2d = get3dPose().toPose2d();
-            return convertedPose2d;
-        } else return null;
-    }
-
-    public boolean hasTarget() {
-        if (currentResult != null){
-            var result = currentResult.hasTargets();
-            return result; 
-        } else return false;
-    }
-
-    public double getCamTimeStamp() {
-            double imageCaptureTime = currentResult.getTimestampSeconds(); 
-            return imageCaptureTime; 
-    }
-
-    // public PhotonTrackedTarget getBestTarget() {
-    //     if (hasTarget()){
-    //         PhotonTrackedTarget target = getCamResult().
-    //         return target;
-    //     } else {
-    //         return null;
-    //     }
-        
-    // }
-
-    public int getBestAprilTagId(){
-        if(hasTarget() && currentResult != null){
-            return currentResult.getBestTarget().getFiducialId();
-        } else return 0;
-        
-    }
-
-    public Rotation2d getAngleToAprilTag() {
-        if (hasTarget() && currentResult != null){
-            double yaw = currentResult.getBestTarget().getYaw(); 
-            Rotation2d cameraYaw = Rotation2d.fromDegrees(yaw);
-            Rotation2d robotToCamera = new Rotation2d(0); // Replace with your camera's mounting ang
-            return cameraYaw.plus(robotToCamera);
-        } else {
-            return null;
-        }
-        
-    }
-
-    public Command driveToPose(){
-        var targetPose2d = getTargetPose2d();
-            if(targetPose2d != null){
-                PathConstraints pathConstraints = new PathConstraints( 
-                    TunerConstants.kSpeedAt12Volts, TunerConstants.kLinearAcceleration,
-                    TunerConstants.kAngularVelocity, TunerConstants.kAngularAcceleration
-                );
-                return AutoBuilder.pathfindToPose(
-                    getTargetPose2d(),
-                    pathConstraints,
-                    0.0 
-                );
-            } else return Commands.none();
-    }
-
-    public Rotation2d getLastGamePieceAngle(){
-        return lastGamePieceAngle;
-    }
-        
-    public Rotation2d getDegreesToGamePiece() {
-        // Axis are flipped due to FieldCentric M
-        if (hasTarget() && currentResult != null) {
-            int id = getBestAprilTagId();
-            if (DriverStation.getAlliance().get() == Alliance.Red){
-                switch(getClosestGamePiece(id)){
-                    case "Red Reef":
-                        switch (id) {
-                            case 6: return Rotation2d.fromDegrees(300);
-                            case 7: return Rotation2d.fromDegrees(0);
-                            case 8: return Rotation2d.fromDegrees(60);
-                            case 9: return Rotation2d.fromDegrees(120);
-                            case 10: return Rotation2d.fromDegrees(180);
-                            case 11: return Rotation2d.fromDegrees(240);
-                        }
-                        break;
-                    case "Red Barge":
-                        switch (id) {
-                            case 15: return Rotation2d.fromDegrees(180); // 
-                            case 5: return Rotation2d.fromDegrees(0); // 
-                        }
-                        break;
-
-                    case "Red Coral Station":
-                        switch (id) {
-                            case 2: return Rotation2d.fromDegrees(245); // 
-                            case 1: return Rotation2d.fromDegrees(125); // 
-                        }
-                        break;
-                    case "Red Processor":
-                        return Rotation2d.fromDegrees(270);
-                    default:
-                        return null; 
-                    }
-            } else {
-                switch (getClosestGamePiece(id)) {      
-                    case "Blue Reef":
-                        switch (id) {
-                            case 17: return Rotation2d.fromDegrees(60); // 
-                            case 18: return Rotation2d.fromDegrees(0); // 
-                            case 19: return Rotation2d.fromDegrees(300); // 
-                            case 20: return Rotation2d.fromDegrees(240); //
-                            case 21: return Rotation2d.fromDegrees(180); //
-                            case 22: return Rotation2d.fromDegrees(120); // 
-                        }
-                        break;
-                    case "Blue Barge":
-                        switch (id) {
-                            case 14: return Rotation2d.fromDegrees(0); // 
-                            case 4: return Rotation2d.fromDegrees(180); // 
-                        }
-                        break;
-                    case "Blue Coral Station":
-                        switch (id) {
-                            case 12: return Rotation2d.fromDegrees(245); // 
-                            case 13: return Rotation2d.fromDegrees(125); // 
-                        }
-                        break;
-                    case "Blue Processor":
-                        return Rotation2d.fromDegrees(270);
-                    default: return null;
-                    }
-            }  
-        }
-        return null; 
-    }
-    
-    
-    public String getClosestGamePiece(int id) {
-        if(hasTarget() && currentResult != null){
-            if (blueReef.contains(id)){
-                return "Blue Reef";
-            } else if(redReef.contains(id)){
-                return "Red Reef";
-            } else if(blueBarge.contains(id)){
-                return "Blue Barge";
-            } else if(redBarge.contains(id)){
-                return "Red Barge";
-            } else if(blueCoralStation.contains(id)){
-                return "Blue Coral Station";
-            } else if(redCoralStation.contains(id)){
-                return "Red Coral Station";
-            } else if(blueProcessor.contains(id)){
-                return "Blue Processor";
-            } else if(redProcessor.contains(id)){
-                return "Red Processor";
-            } else return "Detected ID but not game piece, check code";
-        } else return "none";
-    }
-
-    public Pose2d getTargetPose2d(){
-        // Axis are flipped due to FieldCentric M
-        if (hasTarget() && currentResult != null) {
-            int id = getBestAprilTagId();
-            if (DriverStation.getAlliance().get() == Alliance.Red){
-                switch(getClosestGamePiece(id)){
-                    case "Red Reef":
-                        switch (id) {
-                            case 6: return new Pose2d(0,0, Rotation2d.fromDegrees(300)); // L 13.581 2.788 | R 13.887 | 2.941
-                            case 7: return new Pose2d(0,0, Rotation2d.fromDegrees(0)); // L 14.393 3.851 | R 14.393 4.182
-                            case 8: return new Pose2d(0,0, Rotation2d.fromDegrees(60)); // L 13.882 5.097 | R 13.595 5.259
-                            case 9: return new Pose2d(0,0, Rotation2d.fromDegrees(120)); // L 12.555 5.284 | R 12.250 5.113
-                            case 10: return new Pose2d(0,0, Rotation2d.fromDegrees(180)); // L 11.71 4.18 | R 11.700 3.857
-                            case 11: return new Pose2d(0,0, Rotation2d.fromDegrees(240)); // L 12.266 2.951 | R 12.536 2.788
-                        }
-                        break;
-                    case "Red Barge":
-                        switch (id) {
-                            case 15: return new Pose2d(0,0, Rotation2d.fromDegrees(180)); // X-> 7.711 Y -> use current state
-                            case 5: return new Pose2d(0,0, Rotation2d.fromDegrees(0)); // X -> 9.842 Y -> use current state
-                        }
-                        break;
-
-                    case "Red Coral Station":
-                        switch (id) {
-                            case 2: return new Pose2d(0,0, Rotation2d.fromDegrees(245)); // 16.258 7.049
-                            case 1: return new Pose2d(0,0, Rotation2d.fromDegrees(125)); // 16.305 1.017
-                        }
-                        break;
-                    case "Red Processor":
-                        return new Pose2d(0,0, Rotation2d.fromDegrees(270)); // 11.524 7.471
-                    default:
-                        return null; 
-                    }
-            } else {
-                switch (getClosestGamePiece(id)) {      
-                    case "Blue Reef":
-                        switch (id) {
-                            case 17: return new Pose2d(3.687,2.922, Rotation2d.fromDegrees(60)); // L 3.687 2.922 | R 3.951 2.771
-                            case 18: return new Pose2d(3.129,4.179, Rotation2d.fromDegrees(0)); // L 3.129 4.179 | R 3.129 3.850
-                            case 19: return new Pose2d(3.96,5.271, Rotation2d.fromDegrees(300)); // L 3.96 5.271 | R 3.672 5.12
-                            case 20: return new Pose2d(5.298,5.11, Rotation2d.fromDegrees(240)); // L 5.298 5.110 | R 5.082 5.273
-                            case 21: return new Pose2d(5.839,3.853, Rotation2d.fromDegrees(180)); // L 5.839 3.853 | R 5.839 4.168
-                            case 22: return new Pose2d(5.013,2.788, Rotation2d.fromDegrees(120)); // L 5.013 2.788 | R 5.298 2.950
-                        }
-                        break;
-                    case "Blue Barge":
-                        switch (id) {
-                            case 14: return new Pose2d(0,0,  Rotation2d.fromDegrees(0)); // 7.652 6.170
-                            case 4: return new Pose2d(0,0, Rotation2d.fromDegrees(180)); // 9.865 6.170
-                        }
-                        break;
-                    case "Blue Coral Station":
-                        switch (id) {
-                            case 12: return new Pose2d(0,0, Rotation2d.fromDegrees(245)); // 1.416 0.879
-                            case 13: return new Pose2d(0,0, Rotation2d.fromDegrees(125)); // 1.586 7.262
-                        }
-                        break;
-                    case "Blue Processor":
-                        return new Pose2d(0,0, Rotation2d.fromDegrees(270)); // 6.371 0.645
-                    default: return null;
-                    }
-            }  
-        }
-        return null;
-    }
-           
-    @Override
-    public void periodic() {
-        currentResultList = camera.getAllUnreadResults();
-        for (int i = currentResultList.size() - 1; i >= 0; i--) {
-            PhotonPipelineResult result = currentResultList.get(i);
-            if (result.hasTargets()) {
-                currentResult = result;
-                break;
-            } else currentResult = null;
-        }
-
-        if (hasTarget()){
-            drivetrain.addVisionMeasurement(get2dPose(), getCamTimeStamp(), visionMeasurementStdDevs);
-        }
-
-        if(getDegreesToGamePiece() != null){
-        lastGamePieceAngle = getDegreesToGamePiece();
-        }
-
-        SmartDashboard.putNumber("Pose X", drivetrain.getState().Pose.getX());
-        SmartDashboard.putNumber("Pose Y", drivetrain.getState().Pose.getY());
-        SmartDashboard.putNumber("Pose Rotation (Degrees)", drivetrain.getState().Pose.getRotation().getDegrees());
-        SmartDashboard.putNumber("Focused April Tag: ", getBestAprilTagId());
-        SmartDashboard.putString("Game Piece in Focus: ", getClosestGamePiece(getBestAprilTagId()));
-    }
-}
+ import java.util.List;
+ import java.util.Optional;
+ import org.photonvision.EstimatedRobotPose;
+ import org.photonvision.PhotonCamera;
+ import org.photonvision.PhotonPoseEstimator;
+ import org.photonvision.PhotonPoseEstimator.PoseStrategy;
+ import org.photonvision.simulation.PhotonCameraSim;
+ import org.photonvision.simulation.SimCameraProperties;
+ import org.photonvision.simulation.VisionSystemSim;
+ import org.photonvision.targeting.PhotonTrackedTarget;
+ 
+ public class Vision {
+     private final PhotonCamera camera;
+     private final PhotonPoseEstimator photonEstimator;
+     private Matrix<N3, N1> curStdDevs;
+ 
+     // Simulation
+     private PhotonCameraSim cameraSim;
+     private VisionSystemSim visionSim;
+ 
+     public Vision() {
+         camera = new PhotonCamera(kCameraName);
+ 
+         photonEstimator =
+                 new PhotonPoseEstimator(kTagLayout, PoseStrategy.MULTI_TAG_PNP_ON_COPROCESSOR, kRobotToCam);
+         photonEstimator.setMultiTagFallbackStrategy(PoseStrategy.LOWEST_AMBIGUITY);
+ 
+         // ----- Simulation
+         if (Robot.isSimulation()) {
+             // Create the vision system simulation which handles cameras and targets on the field.
+             visionSim = new VisionSystemSim("main");
+             // Add all the AprilTags inside the tag layout as visible targets to this simulated field.
+             visionSim.addAprilTags(kTagLayout);
+             // Create simulated camera properties. These can be set to mimic your actual camera.
+             var cameraProp = new SimCameraProperties();
+             cameraProp.setCalibration(960, 720, Rotation2d.fromDegrees(90));
+             cameraProp.setCalibError(0.35, 0.10);
+             cameraProp.setFPS(15);
+             cameraProp.setAvgLatencyMs(50);
+             cameraProp.setLatencyStdDevMs(15);
+             // Create a PhotonCameraSim which will update the linked PhotonCamera's values with visible
+             // targets.
+             cameraSim = new PhotonCameraSim(camera, cameraProp);
+             // Add the simulated camera to view the targets on this simulated field.
+             visionSim.addCamera(cameraSim, kRobotToCam);
+ 
+             cameraSim.enableDrawWireframe(true);
+         }
+     }
+ 
+     /**
+      * The latest estimated robot pose on the field from vision data. This may be empty. This should
+      * only be called once per loop.
+      *
+      * <p>Also includes updates for the standard deviations, which can (optionally) be retrieved with
+      * {@link getEstimationStdDevs}
+      *
+      * @return An {@link EstimatedRobotPose} with an estimated pose, estimate timestamp, and targets
+      *     used for estimation.
+      */
+     public Optional<EstimatedRobotPose> getEstimatedGlobalPose() {
+         Optional<EstimatedRobotPose> visionEst = Optional.empty();
+         for (var change : camera.getAllUnreadResults()) {
+             visionEst = photonEstimator.update(change);
+             updateEstimationStdDevs(visionEst, change.getTargets());
+ 
+             if (Robot.isSimulation()) {
+                 visionEst.ifPresentOrElse(
+                         est ->
+                                 getSimDebugField()
+                                         .getObject("VisionEstimation")
+                                         .setPose(est.estimatedPose.toPose2d()),
+                         () -> {
+                             getSimDebugField().getObject("VisionEstimation").setPoses();
+                         });
+             }
+         }
+         return visionEst;
+     }
+ 
+     /**
+      * Calculates new standard deviations This algorithm is a heuristic that creates dynamic standard
+      * deviations based on number of tags, estimation strategy, and distance from the tags.
+      *
+      * @param estimatedPose The estimated pose to guess standard deviations for.
+      * @param targets All targets in this camera frame
+      */
+     private void updateEstimationStdDevs(
+             Optional<EstimatedRobotPose> estimatedPose, List<PhotonTrackedTarget> targets) {
+         if (estimatedPose.isEmpty()) {
+             // No pose input. Default to single-tag std devs
+             curStdDevs = kSingleTagStdDevs;
+ 
+         } else {
+             // Pose present. Start running Heuristic
+             var estStdDevs = kSingleTagStdDevs;
+             int numTags = 0;
+             double avgDist = 0;
+ 
+             // Precalculation - see how many tags we found, and calculate an average-distance metric
+             for (var tgt : targets) {
+                 var tagPose = photonEstimator.getFieldTags().getTagPose(tgt.getFiducialId());
+                 if (tagPose.isEmpty()) continue;
+                 numTags++;
+                 avgDist +=
+                         tagPose
+                                 .get()
+                                 .toPose2d()
+                                 .getTranslation()
+                                 .getDistance(estimatedPose.get().estimatedPose.toPose2d().getTranslation());
+             }
+ 
+             if (numTags == 0) {
+                 // No tags visible. Default to single-tag std devs
+                 curStdDevs = kSingleTagStdDevs;
+             } else {
+                 // One or more tags visible, run the full heuristic.
+                 avgDist /= numTags;
+                 // Decrease std devs if multiple targets are visible
+                 if (numTags > 1) estStdDevs = kMultiTagStdDevs;
+                 // Increase std devs based on (average) distance
+                 if (numTags == 1 && avgDist > 4)
+                     estStdDevs = VecBuilder.fill(Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE);
+                 else estStdDevs = estStdDevs.times(1 + (avgDist * avgDist / 30));
+                 curStdDevs = estStdDevs;
+             }
+         }
+     }
+ 
+     /**
+      * Returns the latest standard deviations of the estimated pose from {@link
+      * #getEstimatedGlobalPose()}, for use with {@link
+      * edu.wpi.first.math.estimator.SwerveDrivePoseEstimator SwerveDrivePoseEstimator}. This should
+      * only be used when there are targets visible.
+      */
+     public Matrix<N3, N1> getEstimationStdDevs() {
+         return curStdDevs;
+     }
+ 
+     // ----- Simulation
+ 
+     public void simulationPeriodic(Pose2d robotSimPose) {
+         visionSim.update(robotSimPose);
+     }
+ 
+     /** Reset pose history of the robot in the vision system simulation. */
+     public void resetSimPose(Pose2d pose) {
+         if (Robot.isSimulation()) visionSim.resetRobotPose(pose);
+     }
+ 
+     /** A Field2d for visualizing our robot and objects on the field. */
+     public Field2d getSimDebugField() {
+         if (!Robot.isSimulation()) return null;
+         return visionSim.getDebugField();
+     }
+ }

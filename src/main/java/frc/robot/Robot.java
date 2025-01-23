@@ -9,11 +9,15 @@ import com.ctre.phoenix6.SignalLogger;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
+import frc.robot.Subsystems.CommandSwerveDrivetrain;
+import frc.robot.Subsystems.Vision;
 
 public class Robot extends TimedRobot {
   private Command m_autonomousCommand;
 
   private final RobotContainer m_robotContainer;
+  private Vision vision;
+  private CommandSwerveDrivetrain drivetrain;
 
   public Robot() {
     m_robotContainer = new RobotContainer();
@@ -22,6 +26,17 @@ public class Robot extends TimedRobot {
   @Override
   public void robotPeriodic() {
     CommandScheduler.getInstance().run(); 
+
+    // Correct pose estimate with vision measurements
+        var visionEst = vision.getEstimatedGlobalPose();
+        visionEst.ifPresent(
+                est -> {
+                    // Change our trust in the measurement based on the tags we can see
+                    var estStdDevs = vision.getEstimationStdDevs();
+
+                    drivetrain.addVisionMeasurement(
+                            est.estimatedPose.toPose2d(), est.timestampSeconds, estStdDevs);
+                });
   }
 
   @Override

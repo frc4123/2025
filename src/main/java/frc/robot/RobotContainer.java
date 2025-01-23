@@ -22,9 +22,9 @@ import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 //import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine.Direction;
 
 import frc.robot.commands.generated.TunerConstants;
-import frc.robot.commands.swerve.DriveToPose;
-import frc.robot.subsystems.CommandSwerveDrivetrain;
-import frc.robot.subsystems.Vision;
+// import frc.robot.commands.swerve.DriveToPose;
+import frc.robot.Subsystems.CommandSwerveDrivetrain;
+import frc.robot.Subsystems.Vision;
 
 public class RobotContainer {
     private double MaxSpeed = TunerConstants.kSpeedAt12Volts.in(MetersPerSecond); // kSpeedAt12Volts desired top speed
@@ -47,9 +47,9 @@ public class RobotContainer {
 
     private final CommandSwerveDrivetrain drivetrain = TunerConstants.createDrivetrain();  
     private final Telemetry logger = new Telemetry(MaxSpeed);
-    private final Vision vision = new Vision(drivetrain);
+    private final Vision vision = new Vision();
 
-    private final DriveToPose driveToPose = new DriveToPose(drivetrain, vision);
+    // private final DriveToPose driveToPose = new DriveToPose(drivetrain, vision);
 
     public double currentAngle = drivetrain.getState().Pose.getRotation().getDegrees();
     
@@ -76,14 +76,14 @@ public class RobotContainer {
         );
 
         joystick.a().whileTrue(drivetrain.applyRequest(() -> brake));
-        joystick.b().whileTrue(drivetrain.applyRequest(() -> faceAngle
-            .withVelocityX(0)
-            .withVelocityY(0)
-            .withTargetDirection(vision.getLastGamePieceAngle())
-        ));
+        // joystick.b().whileTrue(drivetrain.applyRequest(() -> faceAngle
+        //     .withVelocityX(0)
+        //     .withVelocityY(0)
+        //     .withTargetDirection(vision.getLastGamePieceAngle())
+        // ));
 
-        joystick.x().whileTrue(driveToPose);
-        joystick.y().whileTrue(vision.driveToPose());
+        // joystick.x().whileTrue(driveToPose);
+        // joystick.y().whileTrue(vision.driveToPose());
 
         //need to configure angles to be 60 degrees and not 45
         joystick.pov(0).whileTrue(drivetrain.applyRequest(() ->
