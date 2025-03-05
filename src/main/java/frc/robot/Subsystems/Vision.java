@@ -4,7 +4,6 @@ import edu.wpi.first.apriltag.AprilTagFieldLayout;
 import edu.wpi.first.math.Matrix;
 import edu.wpi.first.math.VecBuilder;
 import edu.wpi.first.math.geometry.*;
-import edu.wpi.first.math.geometry.*;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
 import edu.wpi.first.networktables.NetworkTableInstance;
@@ -20,13 +19,11 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import org.photonvision.EstimatedRobotPose;
-import java.util.*;
-import org.photonvision.EstimatedRobotPose;
 import org.photonvision.PhotonCamera;
 import org.photonvision.PhotonPoseEstimator;
 import org.photonvision.PhotonPoseEstimator.PoseStrategy;
-import org.photonvision.targeting.PhotonTrackedTarget;
 import org.photonvision.targeting.PhotonPipelineResult;
+import org.photonvision.targeting.PhotonTrackedTarget;
 
 import com.ctre.phoenix6.Utils;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -40,20 +37,16 @@ public class Vision extends SubsystemBase {
     private final Transform3d robotToFrontCam;
     private final Transform3d robotToHighCam;
     
-    // Standard deviations (tune these based on camera characteristics)
     private final Matrix<N3, N1> singleTagStdDevs = VecBuilder.fill(3, 3, 3);
     private final Matrix<N3, N1> multiTagStdDevs = VecBuilder.fill(0.5, 0.5, 1);
     
-    // Alliance awareness
     private int blueInversionFactor = 0;
     private int redInversionFactor = 0;
     
-    // Game piece tracking
     private Rotation2d lastGamePieceAngle = new Rotation2d();
     private Pose2d lastTargetPoseRight = new Pose2d();
     private Pose2d lastTargetPoseLeft = new Pose2d();
     
-    // NetworkTables publishers
     private final StructPublisher<Pose3d> frontCamPosePublisher;
     private final StructPublisher<Pose3d> highCamPosePublisher;
     private final StructPublisher<Transform3d> frontCamTargetTransformPublisher;
@@ -65,7 +58,6 @@ public class Vision extends SubsystemBase {
         this.drivetrain = drivetrain;
         this.aprilTagFieldLayout = loadAprilTagFieldLayout("/fields/Reefscape2025.json");
 
-        // Camera configuration
         frontCamera = new PhotonCamera("Arducam_OV9281_USB_Camera");
         highCamera = new PhotonCamera("Arducam_OV9281_USB_Camera_High");
         
@@ -108,16 +100,8 @@ public class Vision extends SubsystemBase {
 
         // Configure alliance inversion
         if (DriverStation.isDSAttached()) {
-            if (DriverStation.isDSAttached()) {
-                if (DriverStation.getAlliance().orElse(Alliance.Blue) == Alliance.Blue) {
-                    blueInversionFactor = 0;
-                    redInversionFactor = 180;
-                } else {  // Red alliance
-                    blueInversionFactor = 180;
-                    redInversionFactor = 0;
-                }
-            }
-            
+            blueInversionFactor = DriverStation.getAlliance().orElse(Alliance.Blue) == Alliance.Blue ? 0 : 180;
+            redInversionFactor = 180 - blueInversionFactor;
         }
 
         // Initialize NetworkTables publishers
@@ -128,56 +112,47 @@ public class Vision extends SubsystemBase {
         highCamTargetTransformPublisher = inst.getStructTopic("/Vision/HighCamTargetTransform", Transform3d.struct).publish();
     }
 
-    @Override
-    public void periodic() {
-        // Process both cameras
-        processCamera(frontCamera, frontEstimator);
-        processCamera(highCamera, highEstimator);
-        
-        // Update game piece tracking
-        updateGamePieceTracking();
-        
-        // Publish camera poses
-        publishCameraPoses();
-    }
-
-    ////////
-    public static PhotonPipelineResult getLatestResults(PhotonCamera camera) {
-        List<PhotonPipelineResult> currentResultList = camera.getAllUnreadResults();
-        
-        // Search from newest (end of list) to oldest (start of list)
-        for (int i = currentResultList.size() - 1; i >= 0; i--) {
-            PhotonPipelineResult result = currentResultList.get(i);
-            if (result.hasTargets()) {
-                return result;  // Return first valid result with targets
-            }
-        }
-        return null;  // No valid results found
-    }
-    ////////
+    // Getters
+    public Rotation2d getLastGamePieceAngle() { return lastGamePieceAngle; }
+    public Pose2d getLastTargetPoseLeft() { return lastTargetPoseLeft; }
+    public Pose2d getLastTargetPoseRight() { return lastTargetPoseRight; }
 
     private void processCamera(PhotonCamera camera, PhotonPoseEstimator estimator) {
-        PhotonPipelineResult result = getLatestResults(camera);
         
-        // Null check first before accessing methods
-        if (result == null || !result.hasTargets()) return;
-    
-        estimator.setReferencePose(drivetrain.getState().Pose);
-        Optional<EstimatedRobotPose> poseOptional = estimator.update(result);
+        var result = camera.getLatestResult();
+        if (!result.hasTargets()) return;
+
+        if(isTagAllianceColor(result)) {
+            
+            estimator.setReferencePose(drivetrain.getState().Pose);
+            Optional<EstimatedRobotPose> poseOptional = estimator.update(result);
         
-        if (poseOptional.isPresent()) {
-            EstimatedRobotPose est = poseOptional.get();
-            Matrix<N3, N1> stdDevs = calculateStdDevs(est, result.getTargets());
+            if (poseOptional.isPresent()) {
+                EstimatedRobotPose est = poseOptional.get();
+                Matrix<N3, N1> stdDevs = calculateStdDevs(est, result.getTargets());
             
-            drivetrain.addVisionMeasurement(
-                est.estimatedPose.toPose2d(),
-                Utils.fpgaToCurrentTime(est.timestampSeconds),
-                stdDevs
-            );
+                drivetrain.addVisionMeasurement(
+                    est.estimatedPose.toPose2d(),
+                    Utils.fpgaToCurrentTime(est.timestampSeconds),
+                    stdDevs
+                );
             
-            // Publish target transforms
-            publishTargetTransform(result.getBestTarget(), camera.equals(frontCamera));
+                // Publish target transforms
+                publishTargetTransform(result.getBestTarget(), camera.equals(frontCamera));
+            }
         }
+
+        
+    }
+
+    private boolean isTagAllianceColor(PhotonPipelineResult result){
+        if (!result.hasTargets()) return false;
+        if((blueInversionFactor == 0 && Set.of(12,13,17,18,19,20,21,22).contains(result.getBestTarget().getFiducialId())) 
+        || (redInversionFactor == 0 && Set.of(1,2,6,7,8,9,10,11).contains(result.getBestTarget().getFiducialId()))) {
+            
+            return true;
+            
+        } else return false;
     }
 
     private Matrix<N3, N1> calculateStdDevs(EstimatedRobotPose est, List<PhotonTrackedTarget> targets) {
@@ -197,7 +172,7 @@ public class Vision extends SubsystemBase {
         
         double avgDistance = totalDistance / numTags;
         Matrix<N3, N1> baseDevs = numTags >= 2 ? multiTagStdDevs : singleTagStdDevs;
-        return baseDevs.times(0.25 + (avgDistance * avgDistance / 40));
+        return baseDevs.times(1 + (avgDistance * avgDistance / 30));
     }
 
     private void publishTargetTransform(PhotonTrackedTarget target, boolean isFrontCamera) {
@@ -219,8 +194,8 @@ public class Vision extends SubsystemBase {
     private void updateGamePieceTracking() {
         int closestTag = findClosestAprilTag();
         lastGamePieceAngle = calculateGamePieceAngle(closestTag);
-        lastTargetPoseLeft = getTargetPose2dLeft(closestTag);
-        lastTargetPoseRight = getTargetPose2dRight(closestTag);
+        // lastTargetPoseLeft = getTargetPose2dLeft(closestTag);
+        // lastTargetPoseRight = getTargetPose2dRight(closestTag);
     }
 
     private void publishCameraPoses() {
@@ -256,47 +231,45 @@ public class Vision extends SubsystemBase {
         }
     }
 
-    private Pose2d getTargetPose2dLeft(int tagId) {
-        // Implement your specific left target positions
-        switch(tagId) {
-            case 6: return new Pose2d(13.581, 2.788, Rotation2d.fromDegrees(300 + redInversionFactor));
-            case 17: return new Pose2d(3.687, 2.922, Rotation2d.fromDegrees(60 + blueInversionFactor));
-            // Add all other cases from your original implementation
-            default: return new Pose2d();
-        }
-    }
+    // private Pose2d getTargetPose2dLeft(int tagId) {
+    //     // Implement your specific left target positions
+    //     switch(tagId) {
+    //         case 6: return new Pose2d(13.581, 2.788, Rotation2d.fromDegrees(300 + redInversionFactor));
+    //         case 17: return new Pose2d(3.687, 2.922, Rotation2d.fromDegrees(60 + blueInversionFactor));
+    //         // Add all other cases from your original implementation
+    //         default: return new Pose2d();
+    //     }
+    // }
 
-    private Pose2d getTargetPose2dRight(int tagId) {
-        // Implement your specific right target positions
-        switch(tagId) {
-            case 6: return new Pose2d(13.887, 2.941, Rotation2d.fromDegrees(300 + redInversionFactor));
-            case 17: return new Pose2d(3.951, 2.771, Rotation2d.fromDegrees(60 + blueInversionFactor));
-            // Add all other cases from your original implementation
-            default: return new Pose2d();
-        }
-    }
+    // private Pose2d getTargetPose2dRight(int tagId) {
+    //     // Implement your specific right target positions
+    //     switch(tagId) {
+    //         case 6: return new Pose2d(13.887, 2.941, Rotation2d.fromDegrees(300 + redInversionFactor));
+    //         case 17: return new Pose2d(3.951, 2.771, Rotation2d.fromDegrees(60 + blueInversionFactor));
+    //         // Add all other cases from your original implementation
+    //         default: return new Pose2d();
+    //     }
+    // }
 
     public static AprilTagFieldLayout loadAprilTagFieldLayout(String resourceFile) {
         try (InputStream is = Vision.class.getResourceAsStream(resourceFile);
              InputStreamReader isr = new InputStreamReader(is, StandardCharsets.UTF_8)) {
-             AprilTagFieldLayout aprilTagFieldLayout = new ObjectMapper().readValue(isr, AprilTagFieldLayout.class);
-             if (DriverStation.isDSAttached()) {
-                if (DriverStation.getAlliance().orElse(Alliance.Blue) == Alliance.Blue){
-                    aprilTagFieldLayout.setOrigin(AprilTagFieldLayout.OriginPosition.kBlueAllianceWallRightSide);
-                }
-                if (DriverStation.getAlliance().orElse(Alliance.Blue) == Alliance.Red){
-                    aprilTagFieldLayout.setOrigin(AprilTagFieldLayout.OriginPosition.kRedAllianceWallRightSide);
-                }
-             }
-             return aprilTagFieldLayout;
+            return new ObjectMapper().readValue(isr, AprilTagFieldLayout.class);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
- 
     }
 
-    // Getters
-    public Rotation2d getLastGamePieceAngle() { return lastGamePieceAngle; }
-    public Pose2d getLastTargetPoseLeft() { return lastTargetPoseLeft; }
-    public Pose2d getLastTargetPoseRight() { return lastTargetPoseRight; }
+    @Override
+    public void periodic() {
+        // Process both cameras
+        processCamera(frontCamera, frontEstimator);
+        processCamera(highCamera, highEstimator);
+        
+        // Update game piece tracking
+        updateGamePieceTracking();              
+        
+        // Publish camera poses
+        publishCameraPoses();
+    }
 }
