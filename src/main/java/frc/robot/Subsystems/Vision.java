@@ -108,8 +108,16 @@ public class Vision extends SubsystemBase {
 
         // Configure alliance inversion
         if (DriverStation.isDSAttached()) {
-            blueInversionFactor = DriverStation.getAlliance().orElse(Alliance.Blue) == Alliance.Blue ? 0 : 180;
-            redInversionFactor = 180 - blueInversionFactor;
+            if (DriverStation.isDSAttached()) {
+                if (DriverStation.getAlliance().orElse(Alliance.Blue) == Alliance.Blue) {
+                    blueInversionFactor = 0;
+                    redInversionFactor = 180;
+                } else {  // Red alliance
+                    blueInversionFactor = 180;
+                    redInversionFactor = 0;
+                }
+            }
+            
         }
 
         // Initialize NetworkTables publishers
@@ -271,10 +279,20 @@ public class Vision extends SubsystemBase {
     public static AprilTagFieldLayout loadAprilTagFieldLayout(String resourceFile) {
         try (InputStream is = Vision.class.getResourceAsStream(resourceFile);
              InputStreamReader isr = new InputStreamReader(is, StandardCharsets.UTF_8)) {
-            return new ObjectMapper().readValue(isr, AprilTagFieldLayout.class);
+             AprilTagFieldLayout aprilTagFieldLayout = new ObjectMapper().readValue(isr, AprilTagFieldLayout.class);
+             if (DriverStation.isDSAttached()) {
+                if (DriverStation.getAlliance().orElse(Alliance.Blue) == Alliance.Blue){
+                    aprilTagFieldLayout.setOrigin(AprilTagFieldLayout.OriginPosition.kBlueAllianceWallRightSide);
+                }
+                if (DriverStation.getAlliance().orElse(Alliance.Blue) == Alliance.Red){
+                    aprilTagFieldLayout.setOrigin(AprilTagFieldLayout.OriginPosition.kRedAllianceWallRightSide);
+                }
+             }
+             return aprilTagFieldLayout;
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+ 
     }
 
     // Getters

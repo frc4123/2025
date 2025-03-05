@@ -2,6 +2,7 @@ package frc.robot;
 
 import static edu.wpi.first.units.Units.*;
 
+import edu.wpi.first.apriltag.AprilTagFieldLayout;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
@@ -9,6 +10,8 @@ import edu.wpi.first.math.kinematics.SwerveDriveKinematics;
 import edu.wpi.first.math.util.Units;
 import edu.wpi.first.units.measure.Angle;
 import edu.wpi.first.units.measure.Distance;
+import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.DriverStation.Alliance;
 
 public class Constants {
     
@@ -162,31 +165,55 @@ public class Constants {
 
     public static class AutoDriveConstants {
 
-        public static final Pose2d[] BLUE_REEF_POSES = {
-            new Pose2d(3.6576, 4.0259, new Rotation2d(0 * Math.PI / 180.0)), // starts facing forward and goes counter clockwise around the reef
-            new Pose2d(4.073906, 3.306318, new Rotation2d(60 * Math.PI / 180.0)), // back right //new Pose2d(3.719, 2.614, new Rotation2d(60 * Math.PI / 180.0)),
-            new Pose2d(4.90474, 3.306318, new Rotation2d(120 * Math.PI / 180.0)), 
-            new Pose2d(5.321046, 4.0259, new Rotation2d(180 * Math.PI / 180.0)),
-            new Pose2d(4.904739999999999, 4.745482, new Rotation2d(-120 * Math.PI / 180.0)),
-            new Pose2d(4.073906, 4.745482, new Rotation2d(-60 * Math.PI / 180.0))
-        };
-
-        public static final Pose2d[] RED_REEF_POSES = {
-            new Pose2d(13.890498, 4.0259, new Rotation2d(0 * Math.PI / 180.0)), // starts facing forward and goes counter clockwise around the reef
-            new Pose2d(13.474446, 4.745482, new Rotation2d(60 * Math.PI / 180.0)),
-            new Pose2d(12.643358, 4.745482, new Rotation2d(120 * Math.PI / 180.0)),
-            new Pose2d(12.227305999999999 , 4.0259, new Rotation2d(180 * Math.PI / 180.0)),
-            new Pose2d(12.643358, 3.3063179999999996, new Rotation2d(-120 * Math.PI / 180.0)),
-            new Pose2d(13.474446, 3.3063179999999996, new Rotation2d(-60 * Math.PI / 180.0))
-        };
-
+        public static final Pose2d[] BLUE_REEF_POSES;
+        public static final Pose2d[] RED_REEF_POSES;
+    
+        static { // Use a static block to initialize static variables
+            if (DriverStation.isDSAttached() && DriverStation.getAlliance().orElse(Alliance.Blue) == Alliance.Blue) {
+                BLUE_REEF_POSES = new Pose2d[]{
+                    new Pose2d(3.6576, 4.0259, new Rotation2d(0)),
+                    new Pose2d(4.073906, 3.306318, new Rotation2d(Math.toRadians(60))),
+                    new Pose2d(4.90474, 3.306318, new Rotation2d(Math.toRadians(120))),
+                    new Pose2d(5.321046, 4.0259, new Rotation2d(Math.toRadians(180))),
+                    new Pose2d(4.904739999999999, 4.745482, new Rotation2d(Math.toRadians(-120))),
+                    new Pose2d(4.073906, 4.745482, new Rotation2d(Math.toRadians(-60)))
+                };
+    
+                RED_REEF_POSES = new Pose2d[]{
+                    new Pose2d(13.890498, 4.0259, new Rotation2d(0)),
+                    new Pose2d(13.474446, 4.745482, new Rotation2d(Math.toRadians(60))),
+                    new Pose2d(12.643358, 4.745482, new Rotation2d(Math.toRadians(120))),
+                    new Pose2d(12.227305999999999, 4.0259, new Rotation2d(Math.toRadians(180))),
+                    new Pose2d(12.643358, 3.3063179999999996, new Rotation2d(Math.toRadians(-120))),
+                    new Pose2d(13.474446, 3.3063179999999996, new Rotation2d(Math.toRadians(-60)))
+                };
+            } else {
+                BLUE_REEF_POSES = new Pose2d[]{
+                    new Pose2d(13.890498, 4.0259, new Rotation2d(0)),
+                    new Pose2d(13.474446, 4.745482, new Rotation2d(Math.toRadians(60))),
+                    new Pose2d(12.643358, 4.745482, new Rotation2d(Math.toRadians(120))),
+                    new Pose2d(12.227305999999999, 4.0259, new Rotation2d(Math.toRadians(180))),
+                    new Pose2d(12.643358, 3.3063179999999996, new Rotation2d(Math.toRadians(-120))),
+                    new Pose2d(13.474446, 3.3063179999999996, new Rotation2d(Math.toRadians(-60)))
+                };
+    
+                RED_REEF_POSES = new Pose2d[]{
+                    new Pose2d(3.6576, 4.0259, new Rotation2d(0)),
+                    new Pose2d(4.073906, 3.306318, new Rotation2d(Math.toRadians(60))),
+                    new Pose2d(4.90474, 3.306318, new Rotation2d(Math.toRadians(120))),
+                    new Pose2d(5.321046, 4.0259, new Rotation2d(Math.toRadians(180))),
+                    new Pose2d(4.904739999999999, 4.745482, new Rotation2d(Math.toRadians(-120))),
+                    new Pose2d(4.073906, 4.745482, new Rotation2d(Math.toRadians(-60)))
+                };
+            }
+        }
+    
         public static final double[][] ADDITIONS = {
-            {-0.4762, -0.075}, // LEFT ADDITION // {0.342, 0} //0.385
-            {-0.4762, -0.47}  // RIGHT ADDITION // {0.342, 0.348} //0.385 was correct in odometry w advantagescope
-            // {+forward/back-, +left/right-}
+            {-0.4762, -0.075}, // LEFT ADDITION
+            {-0.4762, -0.47}  // RIGHT ADDITION
         };
-
     }
+    
 
 
 public class MathUtils {

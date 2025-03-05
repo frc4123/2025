@@ -122,7 +122,7 @@ public class RobotContainer {
         configureBindings();
         initializeAutoChooser();
 
-        faceAngle.HeadingController.setP(7);  // 10
+        faceAngle.HeadingController.setP(5);  // 10
         faceAngle.HeadingController.setI(0.0);
         faceAngle.HeadingController.setD(0);  // 0.4123
         faceAngle.HeadingController.enableContinuousInput(-Math.PI, Math.PI);
