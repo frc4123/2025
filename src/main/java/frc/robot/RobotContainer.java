@@ -21,7 +21,6 @@ import frc.robot.commands.autos.BlueRight2Coralv2;
 // import frc.robot.commands.autos.BlueRightCoral2;
 import frc.robot.commands.autos.LeftLeave;
 import frc.robot.commands.autos.MiddleCoral;
-import frc.robot.commands.autos.mtest;
 import frc.robot.commands.autos.BlueCoralRight3.BlueCoralRight1;
 import frc.robot.commands.autos.BlueCoralRight3.BlueCoralRight2;
 import frc.robot.commands.autos.BlueCoralRight3.BlueCoralRight3;
@@ -314,10 +313,6 @@ public class RobotContainer {
                 .andThen(new CoralIntake(coralManipulator, elevator).withTimeout(0.5))
                 .andThen(new ElevatorDown(elevator).withTimeout(2))
         )));
-
-        autoChooser.addOption("5mtest" , new ParallelCommandGroup(
-        new WaitCommand(0.01),
-          new SequentialCommandGroup(new mtest().metertest())));
 
         // autoChooser.addOption("Right 2 Coral", new ParallelCommandGroup(
         // new WaitCommand(0.01),

@@ -96,6 +96,8 @@ public class Constants {
 
         public static final double gearRatio = -1;
 
+        public static final double METERS_PER_MOTOR_ROTATION = 0.021214765; // Adjust based on your mechanism
+
         public static final double down = 0;
         public static final double auto = 8;
         public static final double algaeGround = 16; // tune
